@@ -1,0 +1,20 @@
+# Traefik (v2 / v3) devant VRC Sentinel Server : à fusionner dans docker-compose.proxy.yml
+# (service « server »), avec le réseau « proxy » décommenté et nommé comme celui de Traefik.
+# Le port 127.0.0.1:8080 peut alors être retiré.
+
+services:
+  server:
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: traefik
+      traefik.http.routers.sentinel.rule: Host(`sentinel.exemple.fr`)
+      traefik.http.routers.sentinel.entrypoints: websecure
+      traefik.http.routers.sentinel.tls.certresolver: letsencrypt
+      traefik.http.services.sentinel.loadbalancer.server.port: "8080"
+      # Envois de synchronisation : jusqu'à 16 Mo.
+      traefik.http.middlewares.sentinel-body.buffering.maxRequestBodyBytes: "16777216"
+      traefik.http.routers.sentinel.middlewares: sentinel-body
+
+      # Sous un sous-chemin (PUBLIC_URL=https://exemple.fr/sentinel), à la place de la règle :
+      #   traefik.http.routers.sentinel.rule: Host(`exemple.fr`) && PathPrefix(`/sentinel`)
+      # Le préfixe peut être transmis tel quel ou retiré (StripPrefix) : les deux marchent.

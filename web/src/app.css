@@ -1,0 +1,55 @@
+:root {
+  --bg: #0f0d14;
+  --panel: #191621;
+  --panel-2: #211c2c;
+  --line: #352d44;
+  --text: #eeeaf7;
+  --muted: #9e97b3;
+  --accent: #b49aff;
+  --accent-2: #9b7af2;
+  --ok: #66e3b0;
+  --warn: #ffcc33;
+  --bad: #ff8a96;
+  --info: #9cc3ff;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  font-size: 14px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 15% 0%, #2a1f45 0, transparent 40%), var(--bg); }
+h1, h2, h3, h4 { margin: 0; }
+a { color: var(--accent); }
+button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px 13px; border: 0; border-radius: 9px; cursor: pointer;
+  background: linear-gradient(110deg, #c0b0ff, var(--accent-2)); color: #171025; font: inherit; font-weight: 700;
+}
+button:hover:not(:disabled) { filter: brightness(1.08); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.ghost { background: #ffffff0d; border: 1px solid var(--line); color: var(--text); }
+button.danger { background: #ff5c6c22; border: 1px solid #ff5c6c66; color: var(--bad); }
+button.ok { background: #66e3b01f; border: 1px solid #66e3b066; color: var(--ok); }
+button.small { padding: 5px 9px; font-size: 12px; }
+input, select, textarea {
+  padding: 8px 11px; border: 1px solid var(--line); border-radius: 9px;
+  background: #120f18; color: var(--text); font: inherit;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid #b49aff55; border-color: var(--accent); }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.card { padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; border: 1px solid; }
+.badge.pending { color: var(--warn); border-color: #ffcc3366; background: #ffcc3312; }
+.badge.active { color: var(--ok); border-color: #66e3b066; background: #66e3b012; }
+.badge.banned { color: var(--bad); border-color: #ff5c6c66; background: #ff5c6c12; }
+.badge.admin { color: var(--info); border-color: #3b82f666; background: #3b82f614; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4a4058; }
+.dot.on { background: var(--ok); box-shadow: 0 0 8px #66e3b088; }
+.error { padding: 10px 12px; border: 1px solid #ff5c6c55; border-radius: 10px; background: #ff5c6c12; color: var(--bad); }
+table { width: 100%; border-collapse: collapse; }
+th { color: var(--muted); font-size: 11px; font-weight: 600; text-align: left; text-transform: uppercase; letter-spacing: 0.04em; }
+th, td { padding: 8px 10px; border-bottom: 1px solid #2a2434; vertical-align: top; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: #ffffff06; }
+code { color: #d0baff; font-family: ui-monospace, Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }

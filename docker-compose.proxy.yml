@@ -1,0 +1,72 @@
+# VRC Sentinel Server derrière TON reverse proxy (nginx, Traefik, Nginx Proxy Manager,
+# Caddy, Apache, Cloudflare Tunnel…) : serveur + PostgreSQL, sans le Caddy intégré.
+#
+#   cp .env.example .env      puis renseigner PUBLIC_URL et POSTGRES_PASSWORD
+#   docker compose -f docker-compose.proxy.yml up -d --build
+#
+# Le serveur écoute en HTTP sur 127.0.0.1:8080 (SERVER_PORT) : le proxy, sur la même
+# machine, termine le HTTPS et relaie vers lui. Exemples de configuration : deploy/.
+#
+# Proxy dans un autre conteneur Docker (Traefik, Nginx Proxy Manager…) : décommenter le
+# réseau « proxy » plus bas, y mettre le nom du réseau de ton proxy, et viser
+# http://server:8080 (ou le nom du conteneur) depuis le proxy.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sentinel
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définir POSTGRES_PASSWORD dans .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks: [backend]
+    shm_size: 256mb
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build: .
+    image: sentinel-server:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://sentinel:${POSTGRES_PASSWORD}@db:5432/sentinel
+      # Adresse vue par les applis et les navigateurs, sous-chemin compris
+      # (https://sentinel.exemple.fr ou https://exemple.fr/sentinel).
+      PUBLIC_URL: ${PUBLIC_URL:?définir PUBLIC_URL dans .env}
+      # Proxys autorisés à transmettre l'adresse du client (IP ou CIDR, « private » =
+      # réseaux privés et cette machine).
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-private}
+      REAL_IP_HEADER: ${REAL_IP_HEADER:-x-forwarded-for}
+      TOKEN_TTL_DAYS: ${TOKEN_TTL_DAYS:-30}
+      DB_MAX_CONNECTIONS: ${DB_MAX_CONNECTIONS:-16}
+      RUST_LOG: ${RUST_LOG:-sentinel_server=info,tower_http=warn}
+    ports:
+      # Seul le proxy de cette machine y accède. BIND_HOST=0.0.0.0 pour un proxy sur une
+      # autre machine du réseau local (alors pare-feu, et TRUSTED_PROXIES = son IP).
+      - "${BIND_HOST:-127.0.0.1}:${SERVER_PORT:-8080}:8080"
+    # « frontend » sert à publier le port (un réseau interne ne le permet pas).
+    networks: [backend, frontend]
+    #   - proxy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+networks:
+  backend:
+    internal: true
+  frontend: {}
+  # proxy:
+  #   external: true
+  #   name: traefik        # nom du réseau Docker de ton proxy
+
+volumes:
+  db-data:

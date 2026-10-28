@@ -1,0 +1,15 @@
+# HTTPS automatique (Let's Encrypt) pour le domaine du serveur.
+{$DOMAIN} {
+	reverse_proxy server:8080 {
+		# Adresse réelle du client, sans reprendre celle envoyée par le client lui-même.
+		header_up X-Forwarded-For {remote_host}
+	}
+	header {
+		-Server
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+	log {
+		output stdout
+		format console
+	}
+}

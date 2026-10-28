@@ -1,0 +1,50 @@
+# Serveur de test sur ce PC : PostgreSQL + serveur, sans Caddy ni HTTPS.
+#
+#   docker compose -f docker-compose.local.yml up -d --build
+#
+# Dans l'appli : adresse http://localhost:8080 (exactement, pas 127.0.0.1), puis
+#   docker compose -f docker-compose.local.yml exec server sentinel-server approve <code> --admin
+#
+# Arrêt : `down` ; ajouter `-v` pour effacer aussi les données de test.
+# N'expose rien sur le réseau : tout écoute sur 127.0.0.1 uniquement.
+
+name: sentinel-local
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sentinel
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: test
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    # Accessible depuis ce PC pour inspecter la base (psql, DBeaver…), port 55432.
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  server:
+    build: .
+    image: sentinel-server:local
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://sentinel:test@db:5432/sentinel
+      # Doit être identique à l'adresse saisie dans l'appli.
+      PUBLIC_URL: http://localhost:8080
+      RUST_LOG: sentinel_server=debug,tower_http=info
+    ports:
+      - "127.0.0.1:8080:8080"
+    # Mêmes protections qu'en production.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  db-data:

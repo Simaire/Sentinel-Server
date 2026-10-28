@@ -1,0 +1,16 @@
+# Caddy déjà installé sur la machine, devant VRC Sentinel Server
+# (docker-compose.proxy.yml, serveur sur 127.0.0.1:8080). HTTPS automatique.
+
+sentinel.exemple.fr {
+	request_body {
+		max_size 16MB
+	}
+	# Caddy ajoute X-Forwarded-For lui-même.
+	reverse_proxy 127.0.0.1:8080
+}
+
+# Sous un sous-chemin (PUBLIC_URL=https://exemple.fr/sentinel), dans le bloc du domaine :
+#
+#	handle /sentinel/* {
+#		reverse_proxy 127.0.0.1:8080
+#	}
