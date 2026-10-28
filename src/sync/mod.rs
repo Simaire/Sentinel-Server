@@ -118,14 +118,40 @@ fn check_row(table: &Table, row: &[Cell]) -> Result<(), &'static str> {
 }
 
 /// Vérifie et prépare les lignes d'une table. Renvoie les lignes acceptées et les refus.
-pub fn validate(table: &'static Table, body: &PushTable, author: &Author<'_>, now: i64) -> ApiResult<(Vec<Vec<Cell>>, Vec<String>)> {
-    let expected = table.column_names();
-    if body.columns.len() != expected.len() || body.columns.iter().zip(&expected).any(|(a, b)| a != b) {
-        return Err(ApiError::BadRequest(format!(
-            "Colonnes de « {} » différentes de celles du serveur : mets Sentinel à jour.",
-            table.name
-        )));
+/// Place de chaque colonne du serveur dans les valeurs envoyées. Une appli d'une autre
+/// version peut envoyer moins de colonnes (les absentes restent inchangées à la fusion) ou
+/// dans un autre ordre ; il faut toutes les clés et colonnes Latest, et aucune colonne
+/// inconnue ou en double.
+fn column_positions(table: &Table, columns: &[String]) -> ApiResult<Vec<Option<usize>>> {
+    let refuse = |why: String| ApiError::BadRequest(format!("Colonnes de « {} » : {why}", table.name));
+    for (i, name) in columns.iter().enumerate() {
+        if table.index_of(name).is_none() {
+            return Err(refuse(format!("« {name} » inconnue du serveur (mets le serveur à jour)")));
+        }
+        if columns[..i].contains(name) {
+            return Err(refuse(format!("« {name} » en double")));
+        }
     }
+    let positions: Vec<Option<usize>> = table
+        .columns
+        .iter()
+        .map(|c| columns.iter().position(|name| name == c.name))
+        .collect();
+    // Une colonne absente arrive vide : sans effet pour Recent, Max et Min (une valeur vide ne
+    // remplace rien), mais une colonne Latest serait effacée. Clés et Latest sont donc exigées.
+    if let Some((column, _)) = table
+        .columns
+        .iter()
+        .zip(&positions)
+        .find(|(c, at)| matches!(c.merge, Merge::Key | Merge::Latest) && at.is_none())
+    {
+        return Err(refuse(format!("colonne « {} » manquante", column.name)));
+    }
+    Ok(positions)
+}
+
+pub fn validate(table: &'static Table, body: &PushTable, author: &Author<'_>, now: i64) -> ApiResult<(Vec<Vec<Cell>>, Vec<String>)> {
+    let positions = column_positions(table, &body.columns)?;
     let updated_at = table.index_of("updated_at");
     let owner = table.owner.as_ref().map(|o| {
         (
@@ -137,12 +163,13 @@ pub fn validate(table: &'static Table, body: &PushTable, author: &Author<'_>, no
     let mut rows = Vec::with_capacity(body.rows.len());
     let mut reasons = Vec::new();
     'rows: for raw in &body.rows {
-        if raw.len() != table.columns.len() {
+        if raw.len() != body.columns.len() {
             reasons.push(format!("{} : nombre de valeurs incorrect", table.name));
             continue;
         }
-        let mut row = Vec::with_capacity(raw.len());
-        for (column, value) in table.columns.iter().zip(raw) {
+        let mut row = Vec::with_capacity(table.columns.len());
+        for (column, at) in table.columns.iter().zip(&positions) {
+            let value = at.map_or(&Value::Null, |i| &raw[i]);
             match parse_cell(column.kind, column.max_len, value) {
                 Ok(cell) => {
                     if column.merge == Merge::Key && !matches!(&cell, Cell::Text(Some(s)) if !s.is_empty()) {
@@ -419,5 +446,34 @@ mod tests {
             rows: vec![],
         };
         assert!(validate(votes, &body, &author(), 0).is_err());
+    }
+
+    #[test]
+    fn older_apps_may_send_fewer_columns() {
+        // Appli 0.1.1 : signalements sans la colonne de suivi, colonnes dans un autre ordre.
+        let reports = tables::table("reports").unwrap();
+        let columns: Vec<String> = [
+            "user_id", "id", "display_name", "category", "note", "avatar_name", "location", "reporter_id",
+            "reporter_name", "created_at", "deleted", "updated_at",
+        ]
+        .map(String::from)
+        .to_vec();
+        let row = json!(["usr_x", "rep_1", "X", "crash", null, null, null, "usr_me", "?", 10, 0, 10]);
+        let body = PushTable { columns: columns.clone(), rows: vec![row.as_array().unwrap().clone()] };
+        let (rows, reasons) = validate(reports, &body, &author(), 100).unwrap();
+        assert!(reasons.is_empty(), "{reasons:?}");
+        let get = |name: &str| rows[0][reports.index_of(name).unwrap()].clone();
+        assert_eq!(get("id"), Cell::Text(Some("rep_1".into())));
+        assert_eq!(get("watch_until"), Cell::Int(None), "absente : inchangée à la fusion");
+        // Colonne inconnue (serveur trop ancien pour l'appli) : refusé avec un message clair.
+        let mut unknown = columns;
+        unknown.push("future".into());
+        let body = PushTable { columns: unknown, rows: vec![] };
+        assert!(validate(reports, &body, &author(), 100).is_err());
+        // Colonne Latest absente : refusée, elle effacerait la valeur des autres.
+        let votes = tables::table("votes").unwrap();
+        let columns = ["target_type", "target_id", "voter_id", "voter_name", "updated_at"].map(String::from).to_vec();
+        let body = PushTable { columns, rows: vec![] };
+        assert!(validate(votes, &body, &author(), 100).is_err());
     }
 }

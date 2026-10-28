@@ -142,7 +142,7 @@ async fn sync_round_trip_with_permissions() {
             ["player", "usr_x", "usr_b", null, -1, 100]
         ]},
         "reports": { "columns": columns("reports"), "rows": [
-            ["rep_1", "usr_x", "X", "soundboard", "bruit", null, null, "usr_a", "A", 100, 0, 100]
+            ["rep_1", "usr_x", "X", "soundboard", "bruit", null, null, "usr_a", "A", 100, 0, 100, 2_000_000_000]
         ]},
         "avatars": { "columns": columns("avatars"), "rows": [
             ["Robot", null, null, "2026-10-01T10:00:00", "2026-10-02T10:00:00", 3, null, "{}", null, null, null, null, null, null, null, null, null, null, null, null, 100],
@@ -177,7 +177,7 @@ async fn sync_round_trip_with_permissions() {
 
     // B ne peut pas modifier (ni supprimer) le signalement de A.
     let hijack = json!({ "tables": { "reports": { "columns": columns("reports"), "rows": [
-        ["rep_1", "usr_x", "X", "other", null, null, null, "usr_b", "B", 100, 1, 200]
+        ["rep_1", "usr_x", "X", "other", null, null, null, "usr_b", "B", 100, 1, 200, 0]
     ]}}});
     let (_, result, _) = call(&app, "POST", "/api/v1/sync/push", Some(&b), Some(hijack)).await;
     assert_eq!(result["accepted"].as_u64(), Some(0), "{result}");

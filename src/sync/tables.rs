@@ -159,6 +159,8 @@ pub static TABLES: &[Table] = &[
             int("created_at", Min),
             int("deleted", Max),
             int("updated_at", Max),
+            // Suivi par l'équipe jusqu'à cette date (Unix) ; 0 : pas de suivi.
+            int("watch_until", Recent),
         ],
         owner: Some(Owner {
             id_column: "reporter_id",
@@ -206,6 +208,29 @@ pub static TABLES: &[Table] = &[
             optional: true,
         }),
     },
+    // Spam visuel (portails, stickers, émojis, prints), depuis l'appli 0.1.3.
+    Table {
+        name: "visual_spam",
+        columns: &[
+            key("user_key"),
+            key("location"),
+            key("kind"),
+            text("user_id", Recent),
+            text("display_name", Recent),
+            int("spawns", Max),
+            int("burst", Max),
+            text("first_at", Min),
+            text("last_at", Max),
+            text("observer_id", Min),
+            int("updated_at", Max),
+        ],
+        owner: Some(Owner {
+            id_column: "observer_id",
+            name_column: None,
+            protect_existing: false,
+            optional: true,
+        }),
+    },
     Table {
         name: "alerts",
         columns: &[
@@ -240,6 +265,8 @@ pub static TABLES: &[Table] = &[
             text("detail", Recent),
             int("created_at", Min),
             int("updated_at", Max),
+            // Raison donnée par le modo (obligatoire pour une sanction, depuis l'appli 0.1.3).
+            text("reason", Recent),
         ],
         owner: Some(Owner {
             id_column: "actor_id",

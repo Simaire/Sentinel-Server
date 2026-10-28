@@ -45,6 +45,11 @@ async fn table_counts(state: &Shared) -> ApiResult<Vec<Value>> {
     Ok(out)
 }
 
+/// Ligne du journal d'audit : date, auteur, action, cible, détail.
+type AuditRow = (i64, Option<String>, String, Option<String>, Option<String>);
+/// Ligne de la page du journal : identifiant, date, auteur, action, cible, détail, pseudo de l'auteur.
+type AuditPageRow = (i64, i64, Option<String>, String, Option<String>, Option<String>, Option<String>);
+
 pub async fn overview(State(state): State<Shared>, _admin: AdminSession) -> JsonResult {
     let users: Vec<(String, String, i64)> =
         sqlx::query_as("SELECT status, role, count(*) FROM users GROUP BY status, role")
@@ -181,7 +186,7 @@ pub async fn user_detail(State(state): State<Shared>, _admin: AdminSession, Path
     .bind(&id)
     .fetch_all(&state.pool)
     .await?;
-    let audit_rows: Vec<(i64, Option<String>, String, Option<String>, Option<String>)> = sqlx::query_as(
+    let audit_rows: Vec<AuditRow> = sqlx::query_as(
         "SELECT at, actor, action, target, detail FROM audit_log WHERE actor = $1 OR target = $1
          ORDER BY at DESC LIMIT 50",
     )
@@ -551,7 +556,7 @@ pub struct AuditQuery {
 
 pub async fn audit_log(State(state): State<Shared>, _admin: AdminSession, Query(query): Query<AuditQuery>) -> JsonResult {
     let needle = format!("%{}%", query.q.trim().replace(['%', '_'], ""));
-    let rows: Vec<(i64, i64, Option<String>, String, Option<String>, Option<String>, Option<String>)> = sqlx::query_as(
+    let rows: Vec<AuditPageRow> = sqlx::query_as(
         "SELECT a.id, a.at, a.actor, a.action, a.target, a.detail, u.display_name
          FROM audit_log a LEFT JOIN users u ON u.vrc_id = a.actor
          WHERE $3 = '%%' OR a.action ILIKE $3 OR a.actor ILIKE $3 OR a.target ILIKE $3 OR u.display_name ILIKE $3
