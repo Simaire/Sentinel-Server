@@ -51,6 +51,30 @@ docker compose up -d --build
 
 Chaque variable accepte aussi une forme `*_FILE` qui lit la valeur dans un fichier (secrets Docker).
 
+### Depuis l'image publiée (rien à compiler sur le serveur)
+
+Sur le serveur, il suffit de `docker-compose.image.yml` (renommé `docker-compose.yml`) et d'un `.env` avec `DOMAIN` et `POSTGRES_PASSWORD` : la configuration de Caddy y est intégrée (Docker Compose 2.23 ou plus).
+
+```bash
+docker compose up -d
+```
+
+Mise à jour, données gardées (les nouvelles tables et colonnes sont créées au démarrage) :
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+`SENTINEL_VERSION=0.1.3` dans `.env` fixe une version au lieu de la dernière publiée.
+
+Publier une nouvelle image (x64 et ARM64, `ghcr.io/simaire/sentinel-server:<version>` et `:latest`), une fois connecté avec `docker login ghcr.io -u Simaire` (jeton GitHub avec le droit `write:packages`) :
+
+```powershell
+.\publish-image.ps1
+```
+
+Le Dockerfile compile en croisé avec cargo-zigbuild, sans émulation : un PC ARM64 produit l'image x64 en quelques minutes. L'image est privée par défaut sur GitHub : rends-la publique dans les réglages du paquet, ou fais aussi `docker login ghcr.io` sur le serveur.
+
 ### Derrière ton propre reverse proxy
 
 Si la machine a déjà un proxy (nginx, Traefik, Nginx Proxy Manager, Caddy, Apache, Cloudflare Tunnel…), utilise `docker-compose.proxy.yml` : serveur et PostgreSQL, sans le Caddy intégré. Le serveur écoute en HTTP sur `127.0.0.1:8080`, et ton proxy termine le HTTPS.

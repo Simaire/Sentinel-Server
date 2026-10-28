@@ -1,0 +1,106 @@
+# VRC Sentinel Server depuis l'image publiée (rien à compiler sur le serveur) :
+# serveur + PostgreSQL + Caddy (HTTPS automatique).
+#
+#   1. Copier ce fichier sous le nom docker-compose.yml, avec un .env à côté :
+#        DOMAIN=sentinel.exemple.fr
+#        POSTGRES_PASSWORD=<résultat de : openssl rand -hex 32>
+#        # Facultatif : version précise au lieu de la dernière publiée.
+#        # SENTINEL_VERSION=0.1.3
+#   2. docker compose up -d
+#
+# Mettre à jour : docker compose pull && docker compose up -d
+# (les nouvelles tables et colonnes sont créées au démarrage, les données restent).
+#
+# PostgreSQL n'est joignable que par le serveur (réseau interne, aucun port publié).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sentinel
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définir POSTGRES_PASSWORD dans .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks: [backend]
+    shm_size: 256mb
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    image: ghcr.io/simaire/sentinel-server:${SENTINEL_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://sentinel:${POSTGRES_PASSWORD}@db:5432/sentinel
+      PUBLIC_URL: https://${DOMAIN:?définir DOMAIN dans .env}
+      TOKEN_TTL_DAYS: ${TOKEN_TTL_DAYS:-30}
+      DB_MAX_CONNECTIONS: ${DB_MAX_CONNECTIONS:-16}
+      TRUST_PROXY: "true"
+      RUST_LOG: ${RUST_LOG:-sentinel_server=info,tower_http=warn}
+    # Aucun accès à Internet : le serveur ne parle qu'à PostgreSQL et à Caddy.
+    networks: [backend, edge]
+    # Conteneur verrouillé : système de fichiers en lecture seule, aucun privilège.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [server]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+    # Configuration intégrée (Docker Compose 2.23 ou plus) : identique au Caddyfile du projet.
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [edge, public]
+    security_opt: ["no-new-privileges:true"]
+
+configs:
+  caddyfile:
+    # « $$ » : Compose écrit « $ », et Caddy lit lui-même la variable DOMAIN.
+    content: |
+      {$$DOMAIN} {
+        reverse_proxy server:8080 {
+          header_up X-Forwarded-For {remote_host}
+        }
+        header {
+          -Server
+          Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        }
+        log {
+          output stdout
+          format console
+        }
+      }
+
+networks:
+  # Sans accès à Internet : seul le serveur parle à PostgreSQL.
+  backend:
+    internal: true
+  # Caddy ↔ serveur, sans accès à Internet non plus.
+  edge:
+    internal: true
+  # Seul Caddy sort (certificats Let's Encrypt) et publie les ports 80 et 443.
+  public: {}
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:
